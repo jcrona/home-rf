@@ -1,0 +1,636 @@
+#!/bin/sh
+#
+# Home-RF - Web UI for rf-ctrl (A command-line tool to control 433MHz OOK based devices)
+#
+# Copyright (C) 2016 Jean-Christophe Rona <jc@rona.fr>
+#
+# This program is free software; you can redistribute it and/or
+# modify it under the terms of the GNU General Public License
+# as published by the Free Software Foundation; either version 2
+# of the License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+
+
+VERSION="0.6"
+
+PRESETS_FILE=./home-rf/presets.conf
+RF_CTRL=rf-ctrl
+ETHERWAKE=etherwake
+IFCONFIG=ifconfig
+PRINTF=/usr/bin/printf
+
+echo Content-type: text/html
+echo ""
+
+
+[ "${REQUEST_METHOD}" = "POST" ] && read POST_STRING
+
+if [ "${QUERY_STRING}" = "" ]; then
+	QUERY_STRING=${POST_STRING}
+elif [ "${POST_STRING}" != "" ]; then
+	QUERY_STRING="${QUERY_STRING}&${POST_STRING}"
+fi
+
+RF_RESULT="&nbsp;"
+ADDED_POST_PARAMS=""
+
+# Parse query variables
+if [ "${QUERY_STRING}" != "" ]; then
+	for string in $(echo ${QUERY_STRING} | sed -e 's/&/ /g' | sed -e 's/\\/\\\\/g'); do
+		var="$(echo ${string} | cut -d '=' -f 1)"
+		val="$(echo ${string} | cut -d '=' -f 2)"
+		val="$(echo ${val} | tr '+' ' ')"
+		case ${val} in
+			*%[0-9a-fA-F][0-9a-fA-F]*)
+				val="$(echo ${val} | sed -e 's/%0D//g')"
+				val="$(echo ${val} | sed -e 's/%0d//g')"
+				val="$(echo ${val} | sed -e 's/%/\\x/g')"
+				val="$(${PRINTF} "%b" "${val}")"
+			;;
+		esac
+		eval "query_${var}=\"${val}\""
+	done
+fi
+
+# Send the rf-ctrl command if requested, and show the result
+if [ "${query_req}" = "send_rf_parameters" ]; then
+	if [ "${query_protocol}" != "" ] && [ "${query_remote}" != "" ] && \
+	   [ "${query_device}" != "" ] && [ "${query_command}" != "" ]; then
+		if [ "${query_debug}" != "1" ]; then
+			#echo "<center><p>Sending '${query_protocol}' command '${query_command}' to device ID ${query_device}, using remote ID ${query_remote}...</p></center>"
+			${RF_CTRL} -p ${query_protocol} -r ${query_remote} -d ${query_device} -c ${query_command} > /dev/null 2>&1
+			if [ $? = 0 ]; then
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#0080FF\">Command sent !</span>"
+			else
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Command was not properly sent !</span>"
+			fi
+		else
+			RF_RESULT="<span style=\"font-size: 10px;\">$(${RF_CTRL} -vv -p ${query_protocol} -r ${query_remote} -d ${query_device} -c ${query_command} 2>&1 | \
+			while read line; do
+				echo "${line}<br>"
+			done)"
+			RF_RESULT="${RF_RESULT}</span>"
+		fi
+	else
+		RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Some parameters are missing !</span>"
+	fi
+
+	if [ "${query_ajax}" = "1" ]; then
+		echo "${RF_RESULT}"
+		exit 0
+	fi
+fi
+
+# Send the WOL command if requested, and show the result
+if [ "${query_req}" = "send_wol_parameters" ]; then
+	if [ "${query_iface}" != "" ] && [ "${query_mac_addr}" != "" ]; then
+		if [ "${query_passwd}" != "" ]; then
+			query_passwd="-p ${query_passwd}"
+		fi
+
+		if [ "${query_debug}" != "1" ]; then
+			${ETHERWAKE} -i ${query_iface} ${query_passwd} ${query_mac_addr} > /dev/null 2>&1
+			if [ $? = 0 ]; then
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#0080FF\">Command sent !</span>"
+			else
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Command was not properly sent !</span>"
+			fi
+		else
+			RF_RESULT="<span style=\"font-size: 10px;\">$(${ETHERWAKE} -D -i ${query_iface} ${query_passwd} ${query_mac_addr} 2>&1 | \
+			while read line; do
+				echo "${line}<br>"
+			done)"
+			RF_RESULT="${RF_RESULT}</span>"
+		fi
+	else
+		RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Some parameters are missing !</span>"
+	fi
+
+	if [ "${query_ajax}" = "1" ]; then
+		echo "${RF_RESULT}"
+		exit 0
+	fi
+fi
+
+if [ "${query_debug}" = "1" ]; then
+	ADDED_POST_PARAMS="&debug=1"
+fi
+
+# Update the presets file if requested
+if [ "${query_req}" = "update_presets" ] && [ "${query_presets}" != "" ]; then
+	echo "${query_presets}" > ${PRESETS_FILE}
+fi
+
+PRESETS_LIST_HTML=$(cat << EOM
+<table border="0" cellpadding="0" cellspacing="5px">
+EOM
+)
+
+# Create the list of buttons
+COUNT=0
+while read line; do
+	if (echo ${line} | grep -q "^#"); then
+		continue
+	fi
+
+	TYPE=$(echo ${line} | cut -d '|' -f 1)
+	if [ "${TYPE}" = "" ]; then
+		continue
+	fi
+
+	case "${TYPE}" in
+		"switch" | "chime")
+			NAME=$(echo ${line} | cut -d '|' -f 2)
+			if [ "${NAME}" = "" ]; then
+				continue
+			fi
+
+			PROTOCOL=$(echo ${line} | cut -d '|' -f 3)
+			if [ "${PROTOCOL}" = "" ]; then
+				continue
+			fi
+
+			REMOTE_ID=$(echo ${line} | cut -d '|' -f 4)
+			if [ "${REMOTE_ID}" = "" ]; then
+				continue
+			fi
+
+			DEVICE_ID=$(echo ${line} | cut -d '|' -f 5)
+			if [ "${DEVICE_ID}" = "" ]; then
+				continue
+			fi
+
+			case "${TYPE}" in
+				"switch")
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+	<tr>
+		<td>
+			<p>${NAME} :&nbsp;</p>
+		</td>
+		<td>
+			<p>
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="ON" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" />
+			<input type="button" id="p${COUNT}_off" name="p${COUNT}_off" value="OFF" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'off')" />
+			</p>
+		</td>
+	</tr>
+EOM
+)
+				;;
+				"chime")
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+	<tr>
+		<td>
+			<p>${NAME} :&nbsp;</p>
+		</td>
+		<td>
+			<p><input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="RING" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" /></p>
+		</td>
+	</tr>
+EOM
+)
+				;;
+				*)
+					continue
+				;;
+			esac
+		;;
+		"wol")
+			NAME=$(echo ${line} | cut -d '|' -f 2)
+			if [ "${NAME}" = "" ]; then
+				continue
+			fi
+
+			IFACE=$(echo ${line} | cut -d '|' -f 3)
+			if [ "${IFACE}" = "" ]; then
+				continue
+			fi
+
+			MAC_ADDR=$(echo ${line} | cut -d '|' -f 4)
+			if [ "${MAC_ADDR}" = "" ]; then
+				continue
+			fi
+
+			PASSWD=$(echo ${line} | cut -d '|' -f 5)
+
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+	<tr>
+		<td>
+			<p>${NAME} :&nbsp;</p>
+		</td>
+		<td>
+			<p>
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="WAKE" onclick="sendWOLParameters('${IFACE}', '${MAC_ADDR}', '${PASSWD}')" />
+			</p>
+		</td>
+	</tr>
+EOM
+)
+		;;
+		*)
+			continue
+		;;
+	esac
+
+	COUNT=$((${COUNT} + 1))
+done < ${PRESETS_FILE}
+
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+</table>
+EOM
+)
+
+if [ "${query_req}" = "update_presets" ] && [ "${query_ajax}" = "1" ]; then
+	echo "${PRESETS_LIST_HTML}"
+	exit 0
+fi
+
+PRESETS=$(cat ${PRESETS_FILE})
+
+# Check if every needed tool is there
+WARNINGS_HTML=""
+if ! (which ${RF_CTRL} > /dev/null 2>&1); then
+	WARNINGS_HTML=${WARNINGS_HTML}"Warning: rf-ctrl not found !<br>"
+fi
+if ! (which ${ETHERWAKE} > /dev/null 2>&1); then
+	WARNINGS_HTML=${WARNINGS_HTML}"Warning: etherwake not found !<br>"
+fi
+if ! (which ${IFCONFIG} > /dev/null 2>&1); then
+	WARNINGS_HTML=${WARNINGS_HTML}"Warning: ifconfig not found !<br>"
+fi
+if ! (which ${PRINTF} > /dev/null 2>&1); then
+	WARNINGS_HTML=${WARNINGS_HTML}"Warning: printf not found !<br>"
+fi
+
+# Get some info from rf-ctrl
+RF_CTRL_VERSION_HTML=""
+RF_CTRL_VERSION=$(${RF_CTRL} -h | grep -e "rf-ctrl v" | cut -d ' ' -f 2 | sed -e 's/^v//')
+if [ ${RF_CTRL_VERSION} != "" ]; then
+	RF_CTRL_VERSION_HTML=" (rf-ctrl v${RF_CTRL_VERSION})"
+fi
+
+PROTOCOLS_LIST_HTML=""
+OLD_IFS=$IFS
+IFS=','
+for entry in $(${RF_CTRL} -h | grep "Available protocols" | cut -d ':' -f 2); do
+	ENTRY_VALUE=$(echo "${entry}" | cut -d '(' -f 1 | sed -e 's/ //g');
+	ENTRY_NAME=$(echo "${entry}" | cut -d '(' -f 2 | sed -e 's/)//g');
+PROTOCOLS_LIST_HTML=${PROTOCOLS_LIST_HTML}$(cat << EOM
+	<option value="${ENTRY_VALUE}">${ENTRY_NAME}</option>
+EOM
+)
+done
+IFS=$OLD_IFS
+
+COMMANDS_LIST_HTML=""
+OLD_IFS=$IFS
+IFS=','
+for entry in $(${RF_CTRL} -h | grep "Available commands" | cut -d ':' -f 2); do
+	ENTRY_VALUE=$(echo "${entry}" | cut -d '(' -f 1 | sed -e 's/ //g');
+	ENTRY_NAME=$(echo "${entry}" | cut -d '(' -f 2 | sed -e 's/)//g');
+COMMANDS_LIST_HTML=${COMMANDS_LIST_HTML}$(cat << EOM
+	<option value="${ENTRY_VALUE}">${ENTRY_NAME}</option>
+EOM
+)
+done
+IFS=$OLD_IFS
+
+IFACES_LIST_HTML=""
+for entry in $(${IFCONFIG} | grep -e "^[[:alnum:]]" | cut -d ' ' -f 1); do
+	ENTRY_VALUE=${entry}
+	ENTRY_NAME=${entry}
+IFACES_LIST_HTML=${IFACES_LIST_HTML}$(cat << EOM
+	<option value="${ENTRY_VALUE}">${ENTRY_NAME}</option>
+EOM
+)
+done
+
+if [ "${query_ajax}" = "1" ]; then
+	exit 0
+fi
+
+# Actual web UI (CSS/HTML/Javascript)
+cat << EOM
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Home-RF</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta name="viewport" content="width=340">
+	<link rel="shortcut icon" type="image/x-icon" href="../home-rf/favicon.ico" />
+	<link rel="shortcut icon" type="image/png" href="../home-rf/favicon.png" />
+	<style type="text/css">
+		* {
+			margin:0;
+			padding: 0;
+		}
+
+		body {
+			margin: 0;
+			background: #fffffff;
+			padding: 0 0 20px 0;
+		}
+
+		p {
+			margin: 1em 0;
+		}
+
+		body > p, td > p, th > p {
+			margin-top: 0;
+		}
+
+		td {
+			width: 50%;
+		}
+
+		td > p, th > p {
+			margin-bottom: 0;
+		}
+
+		table {
+			font-size: 16;
+			font-weight: normal;
+			text-align: left;
+			margin-left: auto;
+			margin-right: auto;
+		}
+
+		form {
+			margin-bottom: 1em;
+		}
+
+		select > option {
+			padding-left: 3px;
+			padding-right: 5px;
+		}
+
+		#container {
+			width: 308px;
+			min-height: 318px;
+			margin-left: auto;
+			margin-right: auto;
+			padding-bottom: 22px;
+			font-size: 16px;
+			font-family: Helvetica, sans-serif;
+			font-weight: normal;
+			text-align: center;
+			box-shadow: 0px 0px 16px #CCCCCC;
+			background: url('../home-rf/background.png') no-repeat scroll center top #F0F7FF;
+			overflow: auto;
+			z-index: 100;
+		}
+
+		#footer-text {
+			position: fixed;
+			bottom: 0px;
+			right: 0px;
+			padding-left: 1em;
+			padding-right: 1em;
+			text-align: right;
+			font-size: 11px;
+			font-family: Helvetica, sans-serif;
+			font-weight: normal;
+			color: #E0E0E0;
+		}
+
+		input[type="button"], input[type="submit"] {
+			padding: 0 6px 0 6px;
+			font-family: sans-serif;
+			font-size: 11px;
+			color: #000000;
+			border: thin solid;
+			background: #DEEDFF;
+		}
+
+		input[type="text"] {
+			width: 120px;
+		}
+
+		textarea {
+			width: 256px;
+		}
+	</style>
+
+	<script type="text/javascript">
+
+	function sendRFAdvanced() {
+		protocol = document.getElementById("protocol").value;
+		remote = document.getElementById("remote").value;
+		device = document.getElementById("device").value;
+		command = document.getElementById("command").value;
+		sendRFParameters(protocol, remote, device, command);
+	}
+
+	function sendRFParameters(protocol,remote,device,command) {
+		var request = new XMLHttpRequest();
+		request.open("POST", "home-rf", true);
+		request.onreadystatechange=function() {
+			if (this.readyState==4 && this.status==200) {
+				document.getElementById('cmd_result').innerHTML=this.responseText;
+				appear('will_disappear', 100, -5, 40);
+			}
+		};
+		request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+		request.send("protocol=" + encodeURIComponent(protocol) + "&remote=" + encodeURIComponent(remote) + "&device=" + encodeURIComponent(device) + "&command=" + encodeURIComponent(command) + "&ajax=1&req=send_rf_parameters${ADDED_POST_PARAMS}");
+	}
+
+	function sendWOLAdvanced() {
+		iface = document.getElementById("iface").value;
+		mac_addr = document.getElementById("mac_addr").value;
+		passwd = document.getElementById("passwd").value;
+		sendWOLParameters(iface, mac_addr, passwd);
+	}
+
+	function sendWOLParameters(iface,mac_addr,passwd) {
+		var request = new XMLHttpRequest();
+		request.open("POST", "home-rf", true);
+		request.onreadystatechange=function() {
+			if (this.readyState==4 && this.status==200) {
+				document.getElementById('cmd_result').innerHTML=this.responseText;
+				appear('will_disappear', 100, -5, 40);
+			}
+		};
+		request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+		request.send("iface=" + encodeURIComponent(iface) + "&mac_addr=" + encodeURIComponent(mac_addr) + "&passwd=" + encodeURIComponent(passwd) + "&ajax=1&req=send_wol_parameters${ADDED_POST_PARAMS}");
+	}
+
+	function updatePresets() {
+		presets=document.getElementById("presets").value;
+		var request = new XMLHttpRequest();
+		request.open("POST", "home-rf", true);
+		request.onreadystatechange=function() {
+			if (this.readyState==4 && this.status==200) {
+				document.getElementById('presets_list').innerHTML=this.responseText;
+			}
+		};
+		request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+		request.send("presets=" + encodeURIComponent(presets) + "&ajax=1&req=update_presets${ADDED_POST_PARAMS}");
+	}
+
+	function showHideEditor() {
+		if (document.getElementById("preset_editor").style.display == "none") {
+			document.getElementById("preset_editor").style.display = "block";
+			document.getElementById("show_hide_editor").value = "Hide Preset Editor";
+		} else {
+			document.getElementById("preset_editor").style.display = "none";
+			document.getElementById("show_hide_editor").value = "Show Preset Editor";
+		}
+	}
+
+	function showHideAdvanced() {
+		if (document.getElementById("advanced_panel").style.display == "none") {
+			document.getElementById("advanced_panel").style.display = "block";
+			document.getElementById("show_hide_advanced").value = "Hide Advanced Panel";
+		} else {
+			document.getElementById("advanced_panel").style.display = "none";
+			document.getElementById("show_hide_advanced").value = "Show Advanced Panel";
+		}
+	}
+
+	function appear(id, i, steps, speed){
+		var t_o;
+		i = i || 0;
+		steps = steps || 5;
+		speed = speed || 50;
+
+		t_o = setInterval(function(){
+			opacity = i / 100;
+			i = i + steps;
+			if(opacity > 1 || opacity < 0){
+				clearInterval(t_o);
+				return;
+			}
+			elm = document.getElementById(id);
+			if (!elm) {
+				return;
+			}
+			elm.style.opacity = opacity;
+			elm.style.filter = 'alpha(opacity=' + opacity*100 + ')';
+		}, speed);
+	}
+
+	document.onreadystatechange = function () {
+	    if (document.readyState == "complete") {
+		appear('will_disappear', 100, -5, 40);
+	    }
+	}
+
+	</script>
+</head>
+
+<body>
+<div id="container">
+
+<p id="warnings"><span style="color:#FF0000">${WARNINGS_HTML}</span></p>
+<p id="cmd_result">${RF_RESULT}</p>
+
+<div id=presets_list>
+${PRESETS_LIST_HTML}
+</div>
+
+<p><input type="button" id="show_hide_editor" value="Show Preset Editor" onclick="showHideEditor()" /></p>
+<div id="preset_editor" style="display: none;">
+<form id="send_preset" method="post" action="">
+	<p><textarea id="presets" cols="34" rows="8" name="presets">${PRESETS}</textarea></p>
+	<p><input type="button" id="submit" name="submit" value="Update !" onclick="updatePresets()" /></p>
+</form>
+<br>
+</div>
+
+<p><input type="button" id="show_hide_advanced" value="Show Advanced Panel" onclick="showHideAdvanced()" /></p>
+<div id="advanced_panel" style="display: none;">
+<form id="send_raw" method="post" action="">
+<table border="0" cellpadding="0" cellspacing="5px">
+	<tr>
+		<td>
+			<p><label for="protocol">Protocol :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><select id= "protocol" name="protocol">${PROTOCOLS_LIST_HTML}</select></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<p><label for="remote">Remote ID :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><input type="text" id="remote" name="remote" /></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<p><label for="device">Device ID :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><input type="text" id="device" name="device" /></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<p><label for="command">Command :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><select id="command" name="command">${COMMANDS_LIST_HTML}</select></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+		</td>
+		<td>
+			<p><input type="button" id="submit" name="submit" value="Send !" onclick="sendRFAdvanced()" /></p>
+		</td>
+	</tr>
+</table>
+</form>
+<form id="send_wol" method="post" action="">
+<table border="0" cellpadding="0" cellspacing="5px">
+	<tr>
+		<td>
+			<p><label for="iface">Interface :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><select id= "iface" name="iface">${IFACES_LIST_HTML}</select></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<p><label for="mac_addr">MAC Address :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><input type="text" id="mac_addr" name="mac_addr" /></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+			<p><label for="passwd">Password :&nbsp;</label></p>
+		</td>
+		<td>
+			<p><input type="text" id="passwd" name="passwd" /></p>
+		</td>
+	</tr>
+	<tr>
+		<td>
+		</td>
+		<td>
+			<p><input type="button" id="submit" name="submit" value="Wake !" onclick="sendWOLAdvanced()" /></p>
+		</td>
+	</tr>
+</table>
+</form>
+</div>
+</div>
+
+<div id=footer-text>
+<p>Home-RF v${VERSION}${RF_CTRL_VERSION_HTML} ©2016 Jean-Christophe Rona</p>
+</div>
+</body>
+</html>
+EOM
