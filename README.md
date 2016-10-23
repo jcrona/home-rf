@@ -19,7 +19,6 @@ The syntax is the following:
 switch | <name> | <protocol> | <remote ID> | <device ID>
 chime | <name> | <protocol> | <remote ID> | <device ID>
 wol| <name>| <interface> | <MAC> | [password]
-   
 ```
 For instance :
 ```
