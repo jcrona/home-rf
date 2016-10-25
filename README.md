@@ -6,6 +6,8 @@
 Home-RF is a web UI providing a nice interface to the __rf-ctrl__ command-line tool. The rf-ctrl tool allows to control 433MHz OOK based devices (such as plugs, switches or chimes), and can be found here -> https://github.com/jcrona/rf-ctrl.
 Home-RF let you register several switches and chimes (presets) in order to get a graphical remote to control them. You can also register devices that supports the WakeOnLan functionality.
 
+![Home-RF_example](Home-RF_example.png)
+
 For Home-RF to work properly, you will need the __rf-ctrl__ and __etherwake__ tools.
 Please note that Home-RF does not support authentication yet, so an other way to control the access to the web UI is needed in order to use Home-RF from outside the local network, such as SSH, OpenVPN, or htaccess.
 
