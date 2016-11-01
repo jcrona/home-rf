@@ -194,8 +194,20 @@ while read line; do
 				continue
 			fi
 
+			ON_LABEL=$(echo ${line} | cut -d '|' -f 6)
+
+			OFF_LABEL=$(echo ${line} | cut -d '|' -f 7)
+
 			case "${TYPE}" in
 				"switch")
+					if [ "${ON_LABEL}" = "" ]; then
+						ON_LABEL="ON"
+					fi
+
+					if [ "${OFF_LABEL}" = "" ]; then
+						OFF_LABEL="OFF"
+					fi
+
 PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 	<tr>
 		<td>
@@ -203,8 +215,8 @@ PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 		</td>
 		<td>
 			<p>
-			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="ON" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" />
-			<input type="button" id="p${COUNT}_off" name="p${COUNT}_off" value="OFF" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'off')" />
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${ON_LABEL}" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" />
+			<input type="button" id="p${COUNT}_off" name="p${COUNT}_off" value="${OFF_LABEL}" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'off')" />
 			</p>
 		</td>
 	</tr>
@@ -212,13 +224,17 @@ EOM
 )
 				;;
 				"chime")
+					if [ "${ON_LABEL}" = "" ]; then
+						ON_LABEL="RING"
+					fi
+
 PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 	<tr>
 		<td>
 			<p>${NAME} :&nbsp;</p>
 		</td>
 		<td>
-			<p><input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="RING" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" /></p>
+			<p><input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${ON_LABEL}" onclick="sendRFParameters('${PROTOCOL}', ${REMOTE_ID}, ${DEVICE_ID}, 'on')" /></p>
 		</td>
 	</tr>
 EOM
@@ -247,6 +263,11 @@ EOM
 
 			PASSWD=$(echo ${line} | cut -d '|' -f 5)
 
+			LABEL=$(echo ${line} | cut -d '|' -f 6)
+			if [ "${LABEL}" = "" ]; then
+				LABEL="WAKE"
+			fi
+
 PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 	<tr>
 		<td>
@@ -254,7 +275,7 @@ PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 		</td>
 		<td>
 			<p>
-			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="WAKE" onclick="sendWOLParameters('${IFACE}', '${MAC_ADDR}', '${PASSWD}')" />
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${LABEL}" onclick="sendWOLParameters('${IFACE}', '${MAC_ADDR}', '${PASSWD}')" />
 			</p>
 		</td>
 	</tr>
@@ -272,6 +293,11 @@ EOM
 				continue
 			fi
 
+			LABEL=$(echo ${line} | cut -d '|' -f 4)
+			if [ "${LABEL}" = "" ]; then
+				LABEL="SEND"
+			fi
+
 PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 	<tr>
 		<td>
@@ -279,7 +305,7 @@ PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 		</td>
 		<td>
 			<p>
-			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="SEND" onclick="sendCMDParameters('${CMD}')" />
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${LABEL}" onclick="sendCMDParameters('${CMD}')" />
 			</p>
 		</td>
 	</tr>

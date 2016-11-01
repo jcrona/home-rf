@@ -18,15 +18,15 @@ The registered devices are stored in a presets file, which must be edited with H
 Home-RF understands four types: __switch__ for switches and plugs, __chime__ for chime, __wol__ for WakeOnLine compatible devices, and __cmd__ for simple shell commands.
 The syntax is the following:
 ```
-switch | <name> | <protocol> | <remote ID> | <device ID>
-chime | <name> | <protocol> | <remote ID> | <device ID>
-wol | <name> | <interface> | <MAC> | [password]
-cmd | <name> | <command>
+switch | <name> | <protocol> | <remote ID> | <device ID> | [ON label] | [OFF label]
+chime | <name> | <protocol> | <remote ID> | <device ID> | [label]
+wol | <name> | <interface> | <MAC> | [password] | [label]
+cmd | <name> | <command> | [label]
 ```
 For instance :
 ```
 switch|Camera|otax|31|16
-chime|Carillon|dio|24|42
+chime|Carillon|dio|24|42|DRING
 wol|Desktop PC|eth0|00:42:42:42:42:00
 cmd|Reboot|reboot
 ```
