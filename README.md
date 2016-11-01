@@ -15,18 +15,20 @@ Please note that Home-RF does not support authentication yet, so an other way to
 ## Presets file
 
 The registered devices are stored in a presets file, which must be edited with Home-RF's __Preset Editor__.
-Home-RF understands three types: __switch__ for switches and plugs, __chime__ for chime, and __wol__ for WakeOnLine compatible devices.
+Home-RF understands four types: __switch__ for switches and plugs, __chime__ for chime, __wol__ for WakeOnLine compatible devices, and __cmd__ for simple shell commands.
 The syntax is the following:
 ```
 switch | <name> | <protocol> | <remote ID> | <device ID>
 chime | <name> | <protocol> | <remote ID> | <device ID>
-wol| <name>| <interface> | <MAC> | [password]
+wol | <name> | <interface> | <MAC> | [password]
+cmd | <name> | <command>
 ```
 For instance :
 ```
 switch|Camera|otax|31|16
 chime|Carillon|dio|24|42
 wol|Desktop PC|eth0|00:42:42:42:42:00
+cmd|Reboot|reboot
 ```
 
 

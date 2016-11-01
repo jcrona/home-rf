@@ -120,6 +120,32 @@ if [ "${query_req}" = "send_wol_parameters" ]; then
 	fi
 fi
 
+if [ "${query_req}" = "send_cmd_parameters" ]; then
+	if [ "${query_cmd}" != "" ]; then
+		if [ "${query_debug}" != "1" ]; then
+			${query_cmd} > /dev/null 2>&1
+			if [ $? = 0 ]; then
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#0080FF\">Command sent !</span>"
+			else
+				RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Command was not properly sent !</span>"
+			fi
+		else
+			RF_RESULT="<span style=\"font-size: 10px;\">$(${query_cmd} 2>&1 | \
+			while read line; do
+				echo "${line}<br>"
+			done)"
+			RF_RESULT="${RF_RESULT}</span>"
+		fi
+	else
+		RF_RESULT="<span id=\"will_disappear\" style=\"color:#FF0000\">Error: Some parameters are missing !</span>"
+	fi
+
+	if [ "${query_ajax}" = "1" ]; then
+		echo "${RF_RESULT}"
+		exit 0
+	fi
+fi
+
 if [ "${query_debug}" = "1" ]; then
 	ADDED_POST_PARAMS="&debug=1"
 fi
@@ -229,6 +255,31 @@ PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 		<td>
 			<p>
 			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="WAKE" onclick="sendWOLParameters('${IFACE}', '${MAC_ADDR}', '${PASSWD}')" />
+			</p>
+		</td>
+	</tr>
+EOM
+)
+		;;
+		"cmd")
+			NAME=$(echo ${line} | cut -d '|' -f 2)
+			if [ "${NAME}" = "" ]; then
+				continue
+			fi
+
+			CMD=$(echo ${line} | cut -d '|' -f 3)
+			if [ "${CMD}" = "" ]; then
+				continue
+			fi
+
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+	<tr>
+		<td>
+			<p>${NAME} :&nbsp;</p>
+		</td>
+		<td>
+			<p>
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="SEND" onclick="sendCMDParameters('${CMD}')" />
 			</p>
 		</td>
 	</tr>
@@ -460,6 +511,19 @@ cat << EOM
 		};
 		request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
 		request.send("iface=" + encodeURIComponent(iface) + "&mac_addr=" + encodeURIComponent(mac_addr) + "&passwd=" + encodeURIComponent(passwd) + "&ajax=1&req=send_wol_parameters${ADDED_POST_PARAMS}");
+	}
+
+	function sendCMDParameters(cmd) {
+		var request = new XMLHttpRequest();
+		request.open("POST", "home-rf", true);
+		request.onreadystatechange=function() {
+			if (this.readyState==4 && this.status==200) {
+				document.getElementById('cmd_result').innerHTML=this.responseText;
+				appear('will_disappear', 100, -5, 40);
+			}
+		};
+		request.setRequestHeader("Content-type", "application/x-www-form-urlencoded");
+		request.send("cmd=" + encodeURIComponent(cmd) + "&ajax=1&req=send_cmd_parameters${ADDED_POST_PARAMS}");
 	}
 
 	function updatePresets() {
