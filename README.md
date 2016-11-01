@@ -21,7 +21,7 @@ The syntax is the following:
 switch | <name> | <protocol> | <remote ID> | <device ID> | [ON label] | [OFF label]
 chime | <name> | <protocol> | <remote ID> | <device ID> | [label]
 wol | <name> | <interface> | <MAC> | [password] | [label]
-cmd | <name> | <command> | [label]
+cmd | <name> | <command> | [label] | [second command] | [second label]
 ```
 For instance :
 ```

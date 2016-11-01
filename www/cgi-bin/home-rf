@@ -298,6 +298,13 @@ EOM
 				LABEL="SEND"
 			fi
 
+			CMD_BIS=$(echo ${line} | cut -d '|' -f 5)
+
+			LABEL_BIS=$(echo ${line} | cut -d '|' -f 6)
+			if [ "${LABEL_BIS}" = "" ]; then
+				LABEL_BIS="SEND 2"
+			fi
+
 PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 	<tr>
 		<td>
@@ -306,6 +313,17 @@ PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 		<td>
 			<p>
 			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${LABEL}" onclick="sendCMDParameters('${CMD}')" />
+EOM
+)
+
+			if [ "${CMD_BIS}" != "" ]; then
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
+			<input type="button" id="p${COUNT}_on" name="p${COUNT}_on" value="${LABEL_BIS}" onclick="sendCMDParameters('${CMD_BIS}')" />
+EOM
+)
+			fi
+
+PRESETS_LIST_HTML=${PRESETS_LIST_HTML}$(cat << EOM
 			</p>
 		</td>
 	</tr>
